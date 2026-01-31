@@ -5,10 +5,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.List;
 
 public interface OrderRepository extends MongoRepository<Order, String> {
+    List<Order> findByBusinessId(String businessId); // 👈 The Filter
 
-    // Find all "Pending" orders for your dashboard
-    List<Order> findByStatus(String status);
-
-    // To get the last order ID (for auto-increment logic later)
     Order findTopByOrderByReadableOrderIdDesc();
 }

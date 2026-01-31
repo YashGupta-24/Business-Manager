@@ -32,4 +32,6 @@ public class Item {
     // How much Bulk does this packet use?
     // Example: 1.0 for 1kg packet, 0.5 for 500g packet
     private Double weightMultiplier;
+
+    private String businessId;
 }

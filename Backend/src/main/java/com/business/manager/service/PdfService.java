@@ -25,17 +25,23 @@ public class PdfService {
 
             // 1. HEADER
             Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20);
-            Paragraph title = new Paragraph("FAMILY BUSINESS RETAIL", titleFont);
+            Paragraph title = new Paragraph(order.getPartyName(), titleFont);
             title.setAlignment(Element.ALIGN_CENTER);
             document.add(title);
 
             document.add(new Paragraph("\n")); // Spacer
 
-            // 2. ORDER DETAILS
-            document.add(new Paragraph("Order #: " + order.getReadableOrderId()));
-            document.add(new Paragraph("Customer: " + order.getPartyName()));
-            document.add(new Paragraph("Date: " + order.getCreatedAt().toString().split("T")[0]));
+            Paragraph date = new Paragraph(order.getCreatedAt().toString().split("T")[0]);
+            date.setAlignment(Element.ALIGN_CENTER);
+            document.add(date);
+
             document.add(new Paragraph("\n"));
+
+            // 2. ORDER DETAILS
+//            document.add(new Paragraph("Order #: " + order.getReadableOrderId()));
+//            document.add(new Paragraph("Customer: " + order.getPartyName()));
+//            document.add(new Paragraph("Date: " + order.getCreatedAt().toString().split("T")[0]));
+//            document.add(new Paragraph("\n"));
 
             // 3. TABLE
             PdfPTable table = new PdfPTable(4); // 4 Columns

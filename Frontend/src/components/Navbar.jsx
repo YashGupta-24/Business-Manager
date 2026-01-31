@@ -7,7 +7,7 @@ const Navbar = () => {
   const linkClass = (path) => 
     `px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
       location.pathname === path 
-      ? 'bg-primary text-white shadow-md' 
+      ? 'bg-primary shadow-md' 
       : 'text-muted hover:text-dark hover:bg-gray-100'
     }`;
 
@@ -17,7 +17,7 @@ const Navbar = () => {
         <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold">
           F
         </div>
-        <span className="text-xl font-semibold text-dark tracking-tight">FamilyBusiness</span>
+        <span className="text-xl font-semibold text-dark tracking-tight">Business Manager</span>
       </div>
       
       <div className="flex gap-2">

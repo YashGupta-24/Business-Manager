@@ -13,7 +13,7 @@ public class Order {
     @Id
     private String id;
 
-    private Long readableOrderId; // e.g., 1001, 1002 (easier for humans)
+    private String readableOrderId; // e.g., 1001, 1002 (easier for humans)
     private String partyName;
     private String status; // "DRAFT", "FINALIZED", "DELIVERED"
 
@@ -21,4 +21,6 @@ public class Order {
     private Double totalAmount;
 
     private LocalDateTime createdAt;
+
+    private String businessId;
 }

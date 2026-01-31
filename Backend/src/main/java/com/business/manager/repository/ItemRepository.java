@@ -6,10 +6,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import java.util.List;
 
 public interface ItemRepository extends MongoRepository<Item, String> {
+    List<Item> findByBusinessId(String businessId); // 👈 The Filter
 
-    // Custom query to find all Bulk items (for your dashboard)
-    List<Item> findByType(ItemType type);
-
-    // Search items by name (e.g., "Rice")
-    List<Item> findByNameContainingIgnoreCase(String name);
+    List<Item> findByNameContainingIgnoreCase(String keyword);
 }
