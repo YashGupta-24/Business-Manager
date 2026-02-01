@@ -7,30 +7,34 @@ import Login from "./pages/Login";
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Prevent flickering
 
-  // Check if user is already logged in on refresh
   useEffect(() => {
-    const user = localStorage.getItem("user");
-    if (user) setIsAuthenticated(true);
+    // 🔍 CHECK FOR TOKEN ON LOAD
+    const token = localStorage.getItem("token");
+    const businessId = localStorage.getItem("businessId");
+    
+    if (token && businessId) {
+      setIsAuthenticated(true);
+    }
+    setIsLoading(false);
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem("user");
+    localStorage.clear(); // Clear token
     setIsAuthenticated(false);
   };
+
+  if (isLoading) return <div className="p-10 text-center">Loading System...</div>;
 
   return (
     <Router>
       <div className="min-h-screen bg-light font-sans text-dark">
-        {/* Only show Navbar if Logged In */}
         {isAuthenticated && <Navbar onLogout={handleLogout} />}
-        
         <Routes>
           <Route path="/login" element={
              !isAuthenticated ? <Login setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/" />
           } />
-          
-          {/* Protected Routes */}
           <Route path="/" element={isAuthenticated ? <Billing /> : <Navigate to="/login" />} />
           <Route path="/inventory" element={isAuthenticated ? <Inventory /> : <Navigate to="/login" />} />
         </Routes>

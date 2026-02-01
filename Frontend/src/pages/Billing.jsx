@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from "react";
+import { getItems, createOrder, finalizeOrder, downloadInvoice } from "../services/api";
 import html2canvas from "html2canvas";
 import { ReceiptTemplate } from "../components/ReceiptTemplate";
-import { getItems, createOrder, finalizeOrder, downloadInvoice } from "../services/api";
 
 const Billing = () => {
-  // --- STATE MANAGEMENT ---
-  const [items, setItems] = useState([]);          // Full catalog
-  const [cart, setCart] = useState([]);            // Current bill items
-  const [partyName, setPartyName] = useState("");  // Customer Name
-  const [searchTerm, setSearchTerm] = useState("");// Search Bar
-  const [loading, setLoading] = useState(false);   // Processing state
-  const [lastOrder, setLastOrder] = useState(null); // Stores data for the hidden receipt
+  const [items, setItems] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [partyName, setPartyName] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  
+  // We need this to render the hidden receipt for Image generation
+  const [lastOrder, setLastOrder] = useState(null);
+  
+  // Track which button is loading specificially
+  const [loadingType, setLoadingType] = useState(null); // 'PDF' or 'IMAGE' or null
 
-  // --- INITIAL LOAD ---
   useEffect(() => {
     loadCatalog();
   }, []);
@@ -20,98 +22,58 @@ const Billing = () => {
   const loadCatalog = async () => {
     try {
       const result = await getItems();
-      // Filter: We only show "PACKET" items for sale, not the bulk sacks
-      setItems(result.data.filter(i => i.type === "PACKET" || i.type === "BOX"));
+      // Filter out BULK items, show only packets/boxes
+      const retailItems = result.data.filter(i => i.type !== "BULK");
+      setItems(retailItems);
     } catch (error) {
       console.error("Error loading catalog:", error);
     }
   };
 
-  // --- CART ACTIONS ---
   const addToCart = (item) => {
-    const existing = cart.find(c => c.itemId === item.id);
+    const existing = cart.find((x) => x.itemId === item.id);
     if (existing) {
-      // If exists, just increment qty
-      setCart(cart.map(c => c.itemId === item.id ? { ...c, qty: c.qty + 1 } : c));
+      setCart(cart.map((x) => (x.itemId === item.id ? { ...x, qty: x.qty + 1 } : x)));
     } else {
-      // Add new item to cart
-      setCart([...cart, {
-        itemId: item.id,
-        name: item.name,
-        type:item.type,
-        price: item.price,
-        qty: 1,
-        sourceId: item.sourceId,
-        weightMultiplier: item.weightMultiplier
-      }]);
+      setCart([...cart, { itemId: item.id, name: item.name, price: item.price, qty: 1, weightMultiplier: item.weightMultiplier, sourceId: item.sourceId }]);
     }
   };
 
-  const updateQty = (id, newQty) => {
-    if (newQty < 1) {
-      // Remove item if qty drops to 0
-      setCart(cart.filter(c => c.itemId !== id));
-    } else {
-      setCart(cart.map(c => c.itemId === id ? { ...c, qty: parseInt(newQty) } : c));
-    }
+  const removeFromCart = (itemId) => {
+    setCart(cart.filter((x) => x.itemId !== itemId));
   };
 
-  const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+  const updateQty = (itemId, newQty) => {
+    if (newQty < 1) return;
+    setCart(cart.map((x) => (x.itemId === itemId ? { ...x, qty: parseInt(newQty) } : x)));
   };
 
-  const downloadAsImage = async () => {
-    const element = document.getElementById("receipt-hidden");
-    if (!element) return;
+  const calculateTotal = () => cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+
+  // --- UNIFIED CHECKOUT HANDLER ---
+  const handleCheckout = async (type) => {
+    if (!partyName.trim()) return alert("⚠️ Please enter Customer Name");
+    if (cart.length === 0) return alert("⚠️ Cart is empty");
+
+    setLoadingType(type); // Start Loading Spinner on specific button
 
     try {
-      const canvas = await html2canvas(element);
-      const dataUrl = canvas.toDataURL("image/png");
-
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `Receipt_${lastOrder.readableId || "New"}.png`;
-      link.click();
-    } catch (error) {
-      console.error("Image generation failed", error);
-    }
-  };
-
-  // --- CORE CHECKOUT LOGIC (Order + Stock + PDF) ---
-  const handleCheckout = async () => {
-    if (!partyName.trim()) return alert("⚠️ Please enter a Party Name!");
-    if (cart.length === 0) return alert("⚠️ Cart is empty!");
-
-    setLoading(true);
-
-    try {
-      // Step 1: Create the Draft Order
+      // 1. Create & Finalize Order in Backend
       const orderPayload = {
-        partyName: partyName,
+        partyName,
+        items: cart,
         totalAmount: calculateTotal(),
-        items: cart
       };
 
-      const createResponse = await createOrder(orderPayload);
-      const orderId = createResponse.data.id;
-      const readableId = createResponse.data.readableOrderId;
+      const createdOrder = await createOrder(orderPayload);
+      const orderId = createdOrder.data.id;
+      const readableId = createdOrder.data.readableOrderId;
 
-      // Step 2: Finalize (Deduct Stock on Backend)
       await finalizeOrder(orderId);
 
-      // STORE ORDER DATA FOR IMAGE GENERATION
-      setLastOrder({
-        readableId: readableId,
-        partyName: partyName,
-        items: cart,
-        totalAmount: calculateTotal()
-      });
-
-      // Ask User Logic
-      const choice = window.confirm("✅ Order Finalized!\n\nClick OK to Download PDF.\nClick Cancel to Download Image.");
-
-      if (choice) {
-        // PDF Logic (Keep existing)
+      // 2. Handle The Output (PDF or Image)
+      if (type === 'PDF') {
+        // --- PDF FLOW ---
         const pdfResponse = await downloadInvoice(orderId);
         const file = new Blob([pdfResponse.data], { type: 'application/pdf' });
         const fileURL = window.URL.createObjectURL(file);
@@ -120,196 +82,200 @@ const Billing = () => {
         fileLink.setAttribute('download', `Invoice_${readableId}.pdf`);
         document.body.appendChild(fileLink);
         fileLink.click();
-      } else {
-        // Trigger Image Download via a small timeout to let React render the hidden receipt
-        setTimeout(() => downloadAsImage(), 500);
+        
+      } else if (type === 'IMAGE') {
+        // --- IMAGE FLOW ---
+        // Setup data for the hidden component
+        setLastOrder({
+            readableId: readableId,
+            partyName: partyName,
+            items: cart,
+            totalAmount: calculateTotal()
+        });
+        
+        // Wait 500ms for React to render the hidden receipt, then snap it
+        setTimeout(() => downloadAsImage(readableId), 500);
       }
 
-      // // Step 3: Download PDF Invoice automatically
-      // const pdfResponse = await downloadInvoice(orderId);
-
-      // // Create a Blob from the PDF Stream
-      // const file = new Blob([pdfResponse.data], { type: 'application/pdf' });
-
-      // // Build a URL for it
-      // const fileURL = window.URL.createObjectURL(file);
-
-      // // Create a hidden link to force download
-      // const fileLink = document.createElement('a');
-      // fileLink.href = fileURL;
-      // fileLink.setAttribute('download', `Invoice_${readableId}.pdf`);
-      // document.body.appendChild(fileLink);
-      // fileLink.click();
-
-      // // Clean up
-      // window.URL.revokeObjectURL(fileURL);
-      // document.body.removeChild(fileLink);
-
-      // // Success Reset
-      // alert(`✅ Order #${readableId} Finalized & Invoice Downloaded!`);
-      setCart([]);
-      setPartyName("");
+      // 3. Cleanup
+      if (type === 'PDF') {
+          // For PDF we can clear immediately. 
+          // For Image, we wait a bit so the data exists for the snapshot
+          setCart([]);
+          setPartyName("");
+      } else {
+          // Clear after the snapshot is likely taken
+          setTimeout(() => {
+             setCart([]);
+             setPartyName("");
+          }, 1000);
+      }
+      
+      // Success Message (Optional, maybe just a toast)
+      // alert(`✅ Order ${readableId} Finalized!`);
 
     } catch (error) {
       console.error("Checkout failed:", error);
-      const msg = error.response?.data?.message || "Stock Error or Backend Offline";
-      alert("❌ Transaction Failed: " + msg);
+      alert("❌ Transaction Failed. Check console.");
     } finally {
-      setLoading(false);
+      setLoadingType(null); // Stop Loading
     }
   };
 
-  // Filter items based on search
-  const filteredItems = items.filter(i =>
-    i.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const downloadAsImage = async (filenameId) => {
+    const element = document.getElementById("receipt-hidden");
+    if (!element) return;
+    try {
+      const canvas = await html2canvas(element);
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `Receipt_${filenameId || "New"}.png`;
+      link.click();
+    } catch (error) { console.error("Image generation failed", error); }
+  };
+
+  const filteredItems = items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="min-h-screen bg-light p-4 md:p-8">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-        {/* --- LEFT SECTION: PRODUCT CATALOG --- */}
+    <div className="min-h-screen bg-gray-50 p-4 md:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
+        
+        {/* LEFT SECTION: PRODUCT CATALOG */}
         <div className="lg:col-span-2 space-y-6">
-
-          {/* Search Header */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-bold text-dark tracking-tight">Billing Terminal</h2>
-              <p className="text-muted text-sm">Select items to build an order.</p>
-            </div>
-            <input
-              type="text"
-              placeholder="🔍 Search items..."
-              className="bg-white border border-gray-200 rounded-full px-5 py-2 w-full md:w-64 focus:ring-2 focus:ring-primary focus:outline-none transition shadow-sm"
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">
+            <h1 className="text-xl font-bold text-dark">Billing Terminal</h1>
+            <input 
+              type="text" 
+              placeholder="🔍 Search items..." 
+              className="w-full sm:w-64 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:ring-2 focus:ring-primary focus:outline-none"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
 
-          {/* Grid of Items */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
-            {filteredItems.map(item => (
-              <div
-                key={item.id}
-                className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md cursor-pointer transition-all hover:-translate-y-1 group"
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {filteredItems.length === 0 ? (
+              <div className="col-span-full text-center py-10 text-muted">No items found.</div>
+            ) : filteredItems.map((item) => (
+              <div 
+                key={item.id} 
                 onClick={() => addToCart(item)}
+                className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-primary cursor-pointer transition-all flex flex-col justify-between group h-full"
               >
-                <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">
-                  {item.type}
+                <div>
+                  <div className="w-10 h-10 rounded-full bg-indigo-50 text-primary flex items-center justify-center font-bold text-sm mb-3 group-hover:bg-primary group-hover:text-white transition-colors">
+                    {item.name.charAt(0)}
+                  </div>
+                  <h3 className="font-bold text-dark text-sm leading-tight mb-1">{item.name}</h3>
+                  <p className="text-xs text-muted">{item.weightMultiplier} kg</p>
                 </div>
-                <h3 className="font-semibold text-dark text-lg leading-tight mb-3 group-hover:text-primary transition-colors">
-                  {item.name}
-                </h3>
-
-                <div className="flex justify-between items-end mt-2 border-t border-gray-50 pt-3">
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted">Price</span>
-                    <span className="text-xl font-bold text-dark">₹{item.price}</span>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-xs text-muted">Weight</span>
-                    <span className="text-xl font-bold text-dark">₹{item.weightMultiplier} kg</span>
-                  </div>
-                  <button className="bg-primary/10 text-primary w-8 h-8 rounded-full flex items-center justify-center font-bold hover:bg-primary hover:text-white transition">
-                    +
-                  </button>
+                <div className="mt-3 text-right">
+                  <span className="block font-bold text-primary">₹{item.price}</span>
                 </div>
               </div>
             ))}
           </div>
-
-          {filteredItems.length === 0 && (
-            <div className="text-center py-12 text-muted">
-              No items found matching "{searchTerm}"
-            </div>
-          )}
         </div>
 
-        {/* --- RIGHT SECTION: CART & CHECKOUT --- */}
+        {/* RIGHT SECTION: CART & CHECKOUT */}
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-6 sticky top-24 border border-gray-100">
-
-            <h3 className="text-xl font-bold text-dark mb-6 flex items-center gap-2">
-              <span>🛒 Current Order</span>
-              <span className="bg-primary/10 text-primary text-xs px-2 py-1 rounded-full">{cart.length} items</span>
-            </h3>
-
-            {/* Party Input */}
-            <div className="mb-6">
-              <label className="block text-xs font-bold text-muted uppercase tracking-wider mb-2">Customer / Party Name</label>
-              <input
-                type="text"
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 font-medium text-dark focus:ring-2 focus:ring-primary focus:outline-none transition"
-                placeholder="e.g. Gupta Store"
-                value={partyName}
-                onChange={(e) => setPartyName(e.target.value)}
-              />
+          <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden sticky top-24">
+            
+            <div className="bg-primary p-4 text-white">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                Current Order
+              </h2>
             </div>
 
-            {/* Cart Items List */}
-            <div className="space-y-3 mb-6 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin">
+            <div className="p-4 max-h-[40vh] lg:max-h-[50vh] overflow-y-auto space-y-3">
               {cart.length === 0 ? (
-                <div className="text-center py-10 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
-                  <p className="text-muted font-medium">Cart is empty</p>
-                  <p className="text-xs text-gray-400 mt-1">Click items on the left to add</p>
+                <div className="text-center py-8 text-gray-400">
+                  <p>Cart is empty</p>
                 </div>
-              ) : cart.map(item => (
-                <div key={item.itemId} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg transition group">
-                  <div>
-                    <div className="font-medium text-dark text-sm">{item.name} - {item.type}</div>
-                    {/* <div className="font-medium text-dark text-sm">{item.type}</div> */}
-                    <div className="text-xs text-muted mt-0.5">{item.weightMultiplier} kg</div>
-                    <div className="text-xs text-muted mt-0.5">₹{item.price} x {item.qty}</div>
+              ) : cart.map((item) => (
+                <div key={item.itemId} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-dark">{item.name}</p>
+                    <p className="text-xs text-muted">₹{item.price} x {item.qty}</p>
                   </div>
-
-                  <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-2 py-1 shadow-sm">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateQty(item.itemId, item.qty - 1); }}
-                      className="text-gray-400 hover:text-red-500 font-bold px-1 transition"
-                    >-</button>
-                    <span className="font-semibold text-dark w-4 text-center text-sm">{item.qty}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); updateQty(item.itemId, item.qty + 1); }}
-                      className="text-gray-400 hover:text-green-600 font-bold px-1 transition"
-                    >+</button>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-white border border-gray-200 rounded-md">
+                      <button onClick={() => updateQty(item.itemId, item.qty - 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded-l">-</button>
+                      <span className="px-2 text-sm font-bold">{item.qty}</span>
+                      <button onClick={() => updateQty(item.itemId, item.qty + 1)} className="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded-r">+</button>
+                    </div>
+                    <button onClick={() => removeFromCart(item.itemId)} className="text-red-400 hover:text-red-600">
+                      x
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
 
-            {/* Totals & Action */}
-            <div className="border-t border-gray-100 pt-6 mt-auto">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-muted text-sm font-medium">Subtotal</span>
-                <span className="text-dark font-medium">₹{calculateTotal()}</span>
+            <div className="p-4 bg-gray-50 border-t border-gray-100">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-muted font-medium">Total Amount</span>
+                <span className="text-2xl font-bold text-dark">₹{calculateTotal()}</span>
               </div>
-              <div className="flex justify-between items-center mb-6">
-                <span className="text-dark font-bold text-lg">Total Payable</span>
-                <span className="text-3xl font-bold text-primary">₹{calculateTotal()}</span>
-              </div>
+              
+              <div className="space-y-3">
+                <input 
+                  type="text" 
+                  className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-primary focus:outline-none text-sm"
+                  placeholder="Customer Name / Mobile"
+                  value={partyName}
+                  onChange={(e) => setPartyName(e.target.value)}
+                />
+                
+                {/* --- NEW: DUAL BUTTONS --- */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Button 1: PDF */}
+                  <button 
+                    onClick={() => handleCheckout('PDF')}
+                    disabled={loadingType !== null}
+                    className={`py-3 rounded-lg font-bold text-white shadow-md transition-transform transform active:scale-95 flex items-center justify-center gap-2 ${
+                      loadingType ? "bg-gray-400 cursor-not-allowed" : "bg-red-500 hover:bg-red-600"
+                    }`}
+                  >
+                    {loadingType === 'PDF' ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        PDF
+                      </>
+                    )}
+                  </button>
 
-              <button
-                onClick={handleCheckout}
-                disabled={loading || cart.length === 0}
-                className={`w-full py-4 rounded-xl font-bold text-lg shadow-lg shadow-indigo-500/20 transition-all transform hover:-translate-y-1 flex justify-center items-center gap-2
-                  ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-primary hover:bg-primaryHover'}`}
-              >
-                {loading ? (
-                  <>
-                    <span className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
-                    Processing...
-                  </>
-                ) : (
-                  <>✓ Finalize & Print Bill</>
-                )}
-              </button>
+                  {/* Button 2: Image */}
+                  <button 
+                    onClick={() => handleCheckout('IMAGE')}
+                    disabled={loadingType !== null}
+                    className={`py-3 rounded-lg font-bold text-white shadow-md transition-transform transform active:scale-95 flex items-center justify-center gap-2 ${
+                      loadingType ? "bg-gray-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+                    }`}
+                  >
+                    {loadingType === 'IMAGE' ? (
+                      "Saving..."
+                    ) : (
+                      <>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                        Image
+                      </>
+                    )}
+                  </button>
+                </div>
+
+              </div>
             </div>
 
           </div>
         </div>
 
       </div>
-      {/* HIDDEN RECEIPT FOR GENERATION */}
+
+      {/* Hidden Receipt for Screenshot */}
       {lastOrder && <ReceiptTemplate order={lastOrder} id="receipt-hidden" />}
     </div>
   );

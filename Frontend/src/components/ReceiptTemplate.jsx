@@ -32,7 +32,7 @@ export const ReceiptTemplate = ({ order, id }) => {
 
       <table style={{width: "100%", fontSize: "14px", borderCollapse: "collapse"}}>
         <thead>
-          <tr style={{borderBottom: "1px solid black"}}>
+          <tr>
             <th style={{textAlign: "left"}}>Item</th>
             <th style={{textAlign: "right"}}>Qty</th>
             <th style={{textAlign: "right"}}>Amt</th>

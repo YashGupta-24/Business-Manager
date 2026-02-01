@@ -11,17 +11,18 @@ const Login = ({ setIsAuthenticated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const endpoint = isLogin ? "/auth/login" : "/auth/signup";
-    
+
     try {
       // Direct call or use api.js
       const response = await axios.post(`http://localhost:9090/api${endpoint}`, formData);
-      
+
+      // Inside handleSubmit, in the success block:
       if (isLogin) {
-        // Save the Business ID
         localStorage.setItem("businessName", response.data.businessName);
         localStorage.setItem("businessId", response.data.businessId);
-        if(response.data.address) localStorage.setItem("address", response.data.address);
-        
+        localStorage.setItem("token", response.data.token); // 👈 SAVE TOKEN
+        if (response.data.address) localStorage.setItem("address", response.data.address);
+
         setIsAuthenticated(true);
         navigate("/");
       } else {
@@ -39,39 +40,39 @@ const Login = ({ setIsAuthenticated }) => {
         <h2 className="text-2xl font-bold text-center mb-6 text-dark">
           {isLogin ? "Business Login" : "Register Business"}
         </h2>
-        
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Business Name</label>
-            <input type="text" required className="w-full p-2 border rounded" 
+            <input type="text" required className="w-full p-2 border rounded"
               placeholder="e.g. Gupta Traders"
-              onChange={e => setFormData({...formData, businessName: e.target.value})} />
+              onChange={e => setFormData({ ...formData, businessName: e.target.value })} />
           </div>
-          
+
           {/* Show Address field only during Signup */}
           {!isLogin && (
-             <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Address (For Bill)</label>
-                <input type="text" className="w-full p-2 border rounded" 
-                  placeholder="City, State"
-                  onChange={e => setFormData({...formData, address: e.target.value})} />
-             </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Address (For Bill)</label>
+              <input type="text" className="w-full p-2 border rounded"
+                placeholder="City, State"
+                onChange={e => setFormData({ ...formData, address: e.target.value })} />
+            </div>
           )}
 
           <div>
             <label className="block text-sm font-bold text-gray-700 mb-1">Password</label>
-            <input type="password" required className="w-full p-2 border rounded" 
-              onChange={e => setFormData({...formData, password: e.target.value})} />
+            <input type="password" required className="w-full p-2 border rounded"
+              onChange={e => setFormData({ ...formData, password: e.target.value })} />
           </div>
-          
+
           <button type="submit" className="w-full bg-primary py-2 rounded font-bold hover:bg-primaryHover transition">
             {isLogin ? "Login" : "Register"}
           </button>
         </form>
 
         <p className="text-center mt-4 text-sm text-gray-500 cursor-pointer hover:text-primary"
-           onClick={() => setIsLogin(!isLogin)}>
-           {isLogin ? "New Business? Register here" : "Already registered? Login"}
+          onClick={() => setIsLogin(!isLogin)}>
+          {isLogin ? "New Business? Register here" : "Already registered? Login"}
         </p>
       </div>
     </div>

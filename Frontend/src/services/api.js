@@ -9,19 +9,22 @@ const api = axios.create({
 
 // 2. The Interceptor (The "Stamper")
 // Before ANY request leaves the browser, this function runs.
+// ... inside the interceptor ...
 api.interceptors.request.use((config) => {
-    // It grabs the Business ID we saved during Login
     const businessId = localStorage.getItem("businessId");
+    const token = localStorage.getItem("token"); // 👈 Get Token
     
-    // If it exists, it stamps it onto the Request Header
     if (businessId) {
         config.headers["X-Business-Id"] = businessId;
     }
     
+    // Attach Token for Security
+    if (token) {
+        config.headers["Authorization"] = `Bearer ${token}`; 
+    }
+    
     return config;
-}, (error) => {
-    return Promise.reject(error);
-});
+}, (error) => Promise.reject(error));
 
 // 3. Updated API Calls (Using 'api' instead of 'axios')
 export const getItems = () => api.get("/items/all");

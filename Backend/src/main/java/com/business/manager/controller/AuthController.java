@@ -5,6 +5,7 @@ import com.business.manager.service.BusinessService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.business.manager.util.JwtUtil;
 
 import java.util.Map;
 
@@ -15,6 +16,9 @@ public class AuthController {
 
     @Autowired
     private BusinessService businessService;
+
+    @Autowired
+    private JwtUtil jwtUtil;
 
     // 1. Register a new Business
     @PostMapping("/signup")
@@ -31,15 +35,17 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Business business) {
         try {
-            // Validate credentials via Service
             Business dbBusiness = businessService.authenticate(business.getBusinessName(), business.getPassword());
 
-            // Return critical info for the Frontend to store in LocalStorage
+            // 🎫 GENERATE TOKEN
+            String token = jwtUtil.generateToken(dbBusiness.getId(), dbBusiness.getBusinessName());
+
             return ResponseEntity.ok(Map.of(
                     "message", "Login Success",
                     "businessName", dbBusiness.getBusinessName(),
-                    "businessId", dbBusiness.getId(),        // 👈 Used for X-Business-Id header
-                    "address", dbBusiness.getAddress() != null ? dbBusiness.getAddress() : ""
+                    "businessId", dbBusiness.getId(),
+                    "address", dbBusiness.getAddress() != null ? dbBusiness.getAddress() : "",
+                    "token", token // 👈 SEND TOKEN
             ));
         } catch (RuntimeException e) {
             return ResponseEntity.status(401).body(Map.of("message", e.getMessage()));
