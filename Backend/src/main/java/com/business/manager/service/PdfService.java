@@ -11,11 +11,14 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.text.SimpleDateFormat;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class PdfService {
 
     public ByteArrayInputStream generateInvoice(Order order) {
+        log.info("Generating PDF Invoice for order: {}", order.getReadableOrderId());
         Document document = new Document();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
 
@@ -72,8 +75,10 @@ public class PdfService {
             document.add(totalPara);
 
             document.close();
+            log.debug("Successfully generated PDF Invoice byte array for order: {}", order.getReadableOrderId());
 
         } catch (DocumentException e) {
+            log.error("Error generating PDF Invoice for order {}: {}", order.getReadableOrderId(), e.getMessage());
             e.printStackTrace();
         }
 

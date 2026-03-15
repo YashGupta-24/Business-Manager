@@ -12,7 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 public class OrderService {
 
@@ -24,6 +26,7 @@ public class OrderService {
 
     // Create Draft Order
     public Order createOrder(Order order, String businessId) {
+        log.info("Creating draft order for businessId: {}", businessId);
         // Set basic details
         order.setBusinessId(businessId);
         order.setCreatedAt(LocalDateTime.now());
@@ -33,12 +36,15 @@ public class OrderService {
             order.setReadableOrderId(UUID.randomUUID().toString().substring(0, 8).toUpperCase());
         }
 
-        return orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
+        log.debug("Created draft order with readable ID: {}", savedOrder.getReadableOrderId());
+        return savedOrder;
     }
 
     // Finalize Order: Deduct Stock
     @Transactional // Ensures if one item fails, the whole order fails (Consistency)
     public void finalizeOrder(String orderId) {
+        log.info("Finalizing order ID: {}", orderId);
         Order order = getOrderById(orderId);
 
         for (OrderItem orderItem : order.getItems()) {
@@ -50,20 +56,26 @@ public class OrderService {
             if (sourceId != null && !sourceId.isEmpty()) {
                 // Find the Bulk Item (Source)
                 Item bulkItem = itemRepository.findById(sourceId)
-                        .orElseThrow(() -> new RuntimeException("Source Bulk Item not found for: " + orderItem.getName()));
+                        .orElseThrow(() -> {
+                            log.error("Finalization failed: Source Bulk Item ID {} not found for {}", sourceId, orderItem.getName());
+                            return new RuntimeException("Source Bulk Item not found for: " + orderItem.getName());
+                        });
 
                 // Calculate total weight to deduct (e.g., 5 packets * 1kg = 5kg)
                 double totalDeduction = qtySold * weightPerPacket;
 
                 if (bulkItem.getStockQuantity() < totalDeduction) {
+                    log.error("Finalization failed: Insufficient stock for {}. Required: {}, Available: {}", bulkItem.getName(), totalDeduction, bulkItem.getStockQuantity());
                     throw new RuntimeException("Insufficient Bulk Stock for: " + bulkItem.getName());
                 }
 
                 // Update & Save
                 bulkItem.setStockQuantity(bulkItem.getStockQuantity() - totalDeduction);
                 itemRepository.save(bulkItem);
+                log.debug("Deducted {} units from bulk item '{}' (ID: {})", totalDeduction, bulkItem.getName(), bulkItem.getId());
             }
         }
+        log.info("Successfully finalized order ID: {}", orderId);
     }
 
     // Helper: Get Single Order (Used for PDF generation & Finalization)

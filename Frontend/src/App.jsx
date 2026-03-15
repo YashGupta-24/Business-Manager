@@ -10,18 +10,25 @@ function App() {
   const [isLoading, setIsLoading] = useState(true); // Prevent flickering
 
   useEffect(() => {
-    // 🔍 CHECK FOR TOKEN ON LOAD
-    const token = localStorage.getItem("token");
+    // 🔍 CHECK FOR AUTH ON LOAD
+    // Because the JWT is an HttpOnly cookie, we can't read it here.
+    // Instead, we check if we have a businessId stored. 
+    // If the cookie is expired, the backend will return a 401 on the first API call anyway.
     const businessId = localStorage.getItem("businessId");
     
-    if (token && businessId) {
+    if (businessId) {
       setIsAuthenticated(true);
     }
     setIsLoading(false);
   }, []);
 
   const handleLogout = () => {
-    localStorage.clear(); // Clear token
+    // 1. Tell backend to delete the cookie
+    import('./services/api').then(({ logout }) => {
+      logout().catch(err => console.error("Logout failed", err));
+    });
+    // 2. Clear local storage
+    localStorage.clear(); 
     setIsAuthenticated(false);
   };
 

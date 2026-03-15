@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { getItems, addItem, deleteItem, addStock } from "../services/api";
+import log from "../utils/logger";
 
 const Inventory = () => {
   const [items, setItems] = useState([]);
@@ -16,8 +17,9 @@ const Inventory = () => {
     try {
       const result = await getItems();
       setItems(result.data);
+      log.debug("Successfully loaded inventory items:", result.data.length);
     } catch (error) {
-      console.error("Connection Error:", error);
+      log.error("Connection Error while loading inventory:", error);
     }
   };
 
@@ -56,8 +58,9 @@ const Inventory = () => {
       loadItems();
       // Reset Form
       setNewItem({ name: "", type: "BULK", stockQuantity: "", price: "", sourceId: "", weightMultiplier: "" });
+      log.info(`Successfully added new inventory item: ${payload.name} (${payload.type})`);
     } catch (error) {
-      console.error(error);
+      log.error("Error adding inventory item:", error);
       alert("❌ Error adding item.");
     }
   };
@@ -68,7 +71,9 @@ const Inventory = () => {
         await deleteItem(id);
         // Optimistic update: Remove it from UI immediately
         setItems(items.filter(item => item.id !== id));
+        log.info(`Successfully deleted item ID: ${id}`);
       } catch (error) {
+        log.error("Error deleting item:", error);
         alert("Failed to delete item. It might be linked to active orders.");
       }
     }
@@ -95,8 +100,9 @@ const Inventory = () => {
       ));
 
       alert(`✅ Stock Updated! New Total: ${item.stockQuantity + quantity} kg`);
+      log.info(`Restocked item: ${item.name} by ${quantity} units`);
     } catch (error) {
-      console.error(error);
+      log.error("Failed to update stock:", error);
       alert("❌ Failed to update stock.");
     }
   };

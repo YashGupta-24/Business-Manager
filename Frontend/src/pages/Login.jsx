@@ -20,7 +20,8 @@ const Login = ({ setIsAuthenticated }) => {
       if (isLogin) {
         localStorage.setItem("businessName", response.data.businessName);
         localStorage.setItem("businessId", response.data.businessId);
-        localStorage.setItem("token", response.data.token); // 👈 SAVE TOKEN
+        // We NO LONGER save the token to localStorage. 
+        // The browser automatically received and stored the 'jwt' HttpOnly cookie.
         if (response.data.address) localStorage.setItem("address", response.data.address);
 
         setIsAuthenticated(true);

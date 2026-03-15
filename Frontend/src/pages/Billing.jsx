@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { getItems, createOrder, finalizeOrder, downloadInvoice } from "../services/api";
 import html2canvas from "html2canvas";
 import { ReceiptTemplate } from "../components/ReceiptTemplate";
+import log from "../utils/logger";
 
 const Billing = () => {
   const [items, setItems] = useState([]);
@@ -25,8 +26,9 @@ const Billing = () => {
       // Filter out BULK items, show only packets/boxes
       const retailItems = result.data.filter(i => i.type !== "BULK");
       setItems(retailItems);
+      log.debug("Successfully loaded catalog items:", retailItems.length);
     } catch (error) {
-      console.error("Error loading catalog:", error);
+      log.error("Error loading catalog:", error);
     }
   };
 
@@ -113,9 +115,10 @@ const Billing = () => {
       
       // Success Message (Optional, maybe just a toast)
       // alert(`✅ Order ${readableId} Finalized!`);
+      log.info(`Order ${readableId} finalized via ${type}`);
 
     } catch (error) {
-      console.error("Checkout failed:", error);
+      log.error("Checkout failed:", error);
       alert("❌ Transaction Failed. Check console.");
     } finally {
       setLoadingType(null); // Stop Loading
@@ -132,7 +135,8 @@ const Billing = () => {
       link.href = dataUrl;
       link.download = `Receipt_${filenameId || "New"}.png`;
       link.click();
-    } catch (error) { console.error("Image generation failed", error); }
+      log.debug("Snapshot downloaded for receipt:", filenameId);
+    } catch (error) { log.error("Image generation failed", error); }
   };
 
   const filteredItems = items.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase()));
